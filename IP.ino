@@ -38,8 +38,8 @@ void loadConfig() {
   cfgMqttBroker   = prefs.getString("mqttbroker", "broker.emqx.io");
   cfgMqttPort     = prefs.getInt("mqttport", 1883);
   cfgMqttClientId = prefs.getString("clientid", "esp32_" + String(random(9999)));
-  cfgSubTopic     = prefs.getString("subtopic", "esp32/cfg/sub");
-  cfgPubTopic     = prefs.getString("pubtopic", "esp32/cfg/pub");
+  cfgSubTopic     = prefs.getString("subtopic", "esp32/c7ccc7dc/sub");
+  cfgPubTopic     = prefs.getString("pubtopic", "esp32/c7ccc7dc/pub");
   prefs.end();
 }
 

@@ -121,8 +121,8 @@ def web_server(cfg):
                     "mqttbroker": params.get("broker", "broker.emqx.io"),
                     "mqttport": int(params.get("port", "1883")),
                     "clientid": params.get("cid", f"esp8266_{time.ticks_ms()%10000}"),
-                    "subtopic": params.get("sub", "esp32/c7ccc7dc/sub"),
-                    "pubtopic": params.get("pub", "esp32/c7ccc7dc/pub")
+                    "subtopic": params.get("sub", "esp32/cfg/sub"),
+                    "pubtopic": params.get("pub", "esp32/cfg/pub")
                 }
                 save_config(new_cfg)
                 resp = b'<h2>配置保存成功，3秒后重启...</h2>'

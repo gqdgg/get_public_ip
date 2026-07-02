@@ -36,8 +36,8 @@ def load_config():
         "mqttbroker": nvs.getstr("mqttbroker", "broker.emqx.io"),
         "mqttport": nvs.getint("mqttport", 1883),
         "clientid": nvs.getstr("clientid", f"esp32_{time.ticks_ms()%10000}"),
-        "subtopic": nvs.getstr("subtopic", "esp32/c7ccc7dc/sub"),
-        "pubtopic": nvs.getstr("pubtopic", "esp32/c7ccc7dc/pub")
+        "subtopic": nvs.getstr("subtopic", "esp32/cfg/sub"),
+        "pubtopic": nvs.getstr("pubtopic", "esp32/cfg/pub")
     }
     nvs.deinit()
     return cfg
