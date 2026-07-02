@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Web 客户端</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { text-align: center; color: white; margin-bottom: 20px; font-size: 2em; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            font-size: 1.1em; color: #333; margin-bottom: 15px;
+            padding-bottom: 10px; border-bottom: 2px solid #667eea;
+        }
+        .form-row {
+            display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+        }
+        input, select, button, textarea {
+            padding: 10px 14px; border: 1px solid #ddd;
+            border-radius: 8px; font-size: 14px; outline: none;
+        }
+        input:focus, select:focus, textarea:focus { border-color: #667eea; }
+        input[type="text"], input[type="password"], input[type="number"] { flex: 1; min-width: 120px; }
+        select { min-width: 100px; }
+        button {
+            background: #667eea; color: white; border: none;
+            cursor: pointer; font-weight: 500; white-space: nowrap;
+        }
+        button:hover { background: #5a6fd6; }
+        button:active { transform: scale(0.98); }
+        button.secondary { background: #48bb78; }
+        button.secondary:hover { background: #3da76c; }
+        button.danger { background: #e53e3e; }
+        button.danger:hover { background: #c53030; }
+        button:disabled { background: #a0aec0; cursor: not-allowed; }
+        textarea { width: 100%; min-height: 80px; resize: vertical; font-family: monospace; }
+        #status {
+            display: inline-block; padding: 4px 12px;
+            border-radius: 20px; font-size: 12px; font-weight: bold;
+        }
+        #status.disconnected { background: #fed7d7; color: #c53030; }
+        #status.connecting { background: #fef5e7; color: #d69e2e; }
+        #status.connected { background: #c6f6d5; color: #276749; }
+        .status-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        #messages {
+            max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0;
+            border-radius: 8px; padding: 10px; background: #f7fafc; min-height: 100px;
+        }
+        .message-item {
+            padding: 8px 12px; margin-bottom: 8px; border-radius: 6px;
+            background: white; border-left: 3px solid #667eea;
+            font-size: 13px; word-break: break-all;
+        }
+        .message-item .meta { color: #718096; font-size: 11px; margin-bottom: 4px; }
+        .message-item .topic { color: #667eea; font-weight: bold; }
+        .message-item .payload { color: #2d3748; font-family: monospace; white-space: pre-wrap; }
+        .subscribed-topics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .topic-tag {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #e9d8fd; color: #553c9a;
+            padding: 4px 10px; border-radius: 16px; font-size: 13px;
+        }
+        .topic-tag button { background: none; color: #553c9a; padding: 0; font-size: 16px; line-height: 1; }
+        .topic-tag button:hover { color: #e53e3e; }
+        .hint { color: #718096; font-size: 12px; margin-top: 6px; }
+        .clear-btn { background: #718096; font-size: 12px; padding: 6px 12px; }
+        .empty-msg { color: #a0aec0; text-align: center; padding: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 MQTT Web 客户端</h1>
+
+        <!-- 连接配置 -->
+        <div class="card">
+            <h2>📡 连接配置</h2>
+            <div class="status-bar">
+                <span>状态: <span id="status" class="disconnected">未连接</span></span>
+            </div>
+            <div class="form-row">
+                <select id="protocol">
+                    <option value="wss">wss://</option>
+                    <option value="ws">ws://</option>
+                </select>
+                <input type="text" id="host" placeholder="Broker 地址" value="broker.emqx.io">
+                <input type="number" id="port" placeholder="端口" value="8084" style="width: 80px;">
+                <button id="btnConnect" onclick="connect()">连接</button>
+                <button id="btnDisconnect" class="danger" onclick="disconnect()" disabled>断开</button>
+            </div>
+            <div class="form-row">
+                <input type="text" id="clientId" placeholder="Client ID (可选，留空则自动生成)">
+                <input type="text" id="username" placeholder="用户名 (可选)">
+                <input type="password" id="password" placeholder="密码 (可选)">
+            </div>
+            <p class="hint">💡 默认使用 EMQX 公共 Broker (broker.emqx.io:8084)。你也可以使用其他支持 WebSocket 的 MQTT Broker，如 test.mosquitto.org:8081 (ws://)。</p>
+        </div>
+
+        <!-- 订阅 -->
+        <div class="card">
+            <h2>📥 订阅主题</h2>
+            <div class="form-row">
+                <input type="text" id="subTopic" placeholder="主题，如: test/topic" value="esp32/cfg/pub/ip">
+                <select id="qos" style="width: 100px;">
+                    <option value="0">QoS 0</option>
+                    <option value="1">QoS 1</option>
+                    <option value="2">QoS 2</option>
+                </select>
+                <button class="secondary" onclick="subscribe()" id="btnSubscribe" disabled>订阅</button>
+            </div>
+            <div id="subscribedList" class="subscribed-topics"></div>
+        </div>
+
+        <!-- 发布 -->
+        <div class="card">
+            <h2>📤 发布消息</h2>
+            <div class="form-row">
+                <input type="text" id="pubTopic" placeholder="主题，如: test/topic" value="esp32/cfg/sub">
+                <select id="pubQos" style="width: 100px;">
+                    <option value="0">QoS 0</option>
+                    <option value="1">QoS 1</option>
+                    <option value="2">QoS 2</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
+                    <input type="checkbox" id="pubRetain" style="width:auto;"> Retain
+                </label>
+            </div>
+            <textarea id="pubMessage" placeholder="消息内容...">{"hello": "MQTT"}</textarea>
+            <div class="form-row" style="justify-content: flex-end; margin-top: 10px;">
+                <button class="secondary" onclick="publish()" id="btnPublish" disabled>发布消息</button>
+            </div>
+        </div>
+
+        <!-- 消息接收区 -->
+        <div class="card">
+            <h2>💬 接收到的消息</h2>
+            <div class="status-bar">
+                <span id="msgCount">共 0 条</span>
+                <button class="clear-btn" onclick="clearMessages()">清空</button>
+            </div>
+            <div id="messages">
+                <div class="empty-msg">暂无消息</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MQTT.js 通过 jsdelivr CDN 引入，全局暴露 mqtt 变量 -->
+    <script src="https://cdn.jsdelivr.net/npm/mqtt@5.0.3/dist/mqtt.min.js"></script>
+
+    <script>
+        let client = null;
+        let subscribedTopics = new Set();
+        let messageCount = 0;
+
+        const statusEl = document.getElementById('status');
+        const btnConnect = document.getElementById('btnConnect');
+        const btnDisconnect = document.getElementById('btnDisconnect');
+        const btnSubscribe = document.getElementById('btnSubscribe');
+        const btnPublish = document.getElementById('btnPublish');
+        const messagesEl = document.getElementById('messages');
+        const subscribedListEl = document.getElementById('subscribedList');
+        const msgCountEl = document.getElementById('msgCount');
+
+        function updateStatus(status, text) {
+            statusEl.className = status;
+            statusEl.textContent = text;
+        }
+
+        function updateButtons(connected) {
+            btnConnect.disabled = connected;
+            btnDisconnect.disabled = !connected;
+            btnSubscribe.disabled = !connected;
+            btnPublish.disabled = !connected;
+        }
+
+        function addMessage(topic, payload, qos, retain) {
+            messageCount++;
+            msgCountEl.textContent = '共 ' + messageCount + ' 条';
+
+            if (messageCount === 1) {
+                messagesEl.innerHTML = '';
+            }
+
+            var item = document.createElement('div');
+            item.className = 'message-item';
+
+            var time = new Date().toLocaleString('zh-CN');
+            var payloadStr = (typeof payload === 'string') ? payload : JSON.stringify(payload, null, 2);
+
+            item.innerHTML = '<div class="meta">' +
+                '<span class="topic">' + topic + '</span> | ' +
+                'QoS: ' + qos + ' | ' +
+                'Retain: ' + (retain ? '是' : '否') + ' | ' +
+                time +
+                '</div>' +
+                '<div class="payload">' + payloadStr.replace(/</g, '&lt;') + '</div>';
+
+            messagesEl.insertBefore(item, messagesEl.firstChild);
+        }
+
+        function updateSubscribedList() {
+            if (subscribedTopics.size === 0) {
+                subscribedListEl.innerHTML = '<span style="color:#a0aec0;font-size:13px;">尚未订阅任何主题</span>';
+                return;
+            }
+            var html = '';
+            subscribedTopics.forEach(function(topic) {
+                html += '<span class="topic-tag">' + topic +
+                    '<button onclick="unsubscribeTopic(\'' + topic + '\')">&times;</button></span>';
+            });
+            subscribedListEl.innerHTML = html;
+        }
+
+        function connect() {
+            var protocol = document.getElementById('protocol').value;
+            var host = document.getElementById('host').value.trim();
+            var port = document.getElementById('port').value.trim();
+            var clientId = document.getElementById('clientId').value.trim();
+            var username = document.getElementById('username').value.trim();
+            var password = document.getElementById('password').value;
+
+            if (!host || !port) {
+                alert('请填写 Broker 地址和端口');
+                return;
+            }
+
+            if (!clientId) {
+                clientId = 'mqttjs_' + Math.random().toString(16).substring(2, 10);
+                document.getElementById('clientId').value = clientId;
+            }
+
+            var url = protocol + '://' + host + ':' + port + '/mqtt';
+
+            var options = {
+                clientId: clientId,
+                clean: true,
+                connectTimeout: 4000,
+                reconnectPeriod: 1000
+            };
+
+            if (username) options.username = username;
+            if (password) options.password = password;
+
+            updateStatus('connecting', '连接中...');
+            btnConnect.disabled = true;
+
+            try {
+                client = mqtt.connect(url, options);
+
+                client.on('connect', function() {
+                    updateStatus('connected', '已连接');
+                    updateButtons(true);
+                    console.log('MQTT 已连接');
+                });
+
+                client.on('message', function(topic, payload, packet) {
+                    addMessage(topic, payload.toString(), packet.qos, packet.retain);
+                });
+
+                client.on('error', function(err) {
+                    console.error('MQTT 错误:', err);
+                    updateStatus('disconnected', '错误: ' + err.message);
+                    updateButtons(false);
+                });
+
+                client.on('close', function() {
+                    updateStatus('disconnected', '已断开');
+                    updateButtons(false);
+                    subscribedTopics.clear();
+                    updateSubscribedList();
+                });
+
+                client.on('offline', function() {
+                    updateStatus('disconnected', '离线');
+                });
+
+            } catch (err) {
+                alert('连接失败: ' + err.message);
+                updateStatus('disconnected', '未连接');
+                btnConnect.disabled = false;
+            }
+        }
+
+        function disconnect() {
+            if (client) {
+                client.end();
+                client = null;
+            }
+            updateStatus('disconnected', '已断开');
+            updateButtons(false);
+            subscribedTopics.clear();
+            updateSubscribedList();
+        }
+
+        function subscribe() {
+            var topic = document.getElementById('subTopic').value.trim();
+            var qos = parseInt(document.getElementById('qos').value);
+
+            if (!topic) {
+                alert('请输入主题');
+                return;
+            }
+
+            if (!client || !client.connected) {
+                alert('请先连接 MQTT Broker');
+                return;
+            }
+
+            client.subscribe(topic, { qos: qos }, function(err) {
+                if (err) {
+                    alert('订阅失败: ' + err.message);
+                } else {
+                    subscribedTopics.add(topic);
+                    updateSubscribedList();
+                    console.log('已订阅:', topic);
+                }
+            });
+        }
+
+        function unsubscribeTopic(topic) {
+            if (!client || !client.connected) return;
+
+            client.unsubscribe(topic, function(err) {
+                if (!err) {
+                    subscribedTopics.delete(topic);
+                    updateSubscribedList();
+                }
+            });
+        }
+
+        function publish() {
+            var topic = document.getElementById('pubTopic').value.trim();
+            var message = document.getElementById('pubMessage').value;
+            var qos = parseInt(document.getElementById('pubQos').value);
+            var retain = document.getElementById('pubRetain').checked;
+
+            if (!topic) {
+                alert('请输入主题');
+                return;
+            }
+
+            if (!client || !client.connected) {
+                alert('请先连接 MQTT Broker');
+                return;
+            }
+
+            client.publish(topic, message, { qos: qos, retain: retain }, function(err) {
+                if (err) {
+                    alert('发布失败: ' + err.message);
+                } else {
+                    console.log('已发布到:', topic);
+                }
+            });
+        }
+
+        function clearMessages() {
+            messageCount = 0;
+            msgCountEl.textContent = '共 0 条';
+            messagesEl.innerHTML = '<div class="empty-msg">暂无消息</div>';
+        }
+
+        // 初始化
+        updateSubscribedList();
+
+        // 支持按 Enter 订阅/发布
+        document.getElementById('subTopic').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') subscribe();
+        });
+        document.getElementById('pubMessage').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) publish();
+        });
+    </script>
+</body>
+</html>
